@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Árbol Genealógico</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- BARRA DE NAVEGACIÓN SUPERIOR -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="app-brand">
+        <span class="brand-icon">🌳</span>
+        <div>
+          <h1 class="brand-title">Mi Árbol Genealógico</h1>
+          <span class="brand-subtitle" id="headerTreeStats">Cargando...</span>
+        </div>
+      </div>
+
+      <!-- Selector de Modo de Visualización -->
+      <nav class="view-mode-selector">
+        <button id="btnModePedigree" class="btn-view-mode active" title="Vista de antepasados similar a FamilySearch">
+          🌿 Ascendientes (Pedigrí)
+        </button>
+        <button id="btnModeDescendants" class="btn-view-mode" title="Vista de descendencia por generaciones">
+          🌱 Descendientes
+        </button>
+        <button id="btnViewDirectory" class="btn-view-mode" title="Ver listado completo de familiares">
+          📋 Directorio
+        </button>
+        <button id="btnToggleSiblings" class="btn-view-mode active" title="Mostrar/ocultar los hermanos de los antepasados (tíos, tíos-abuelos...)">
+          👥 Hermanos
+        </button>
+        <button id="btnToggleFullTree" class="btn-view-mode" title="Expandir todo el árbol genealógico completo con cónyuges, hijos y ramas completas">
+          🌳 Árbol Completo
+        </button>
+      </nav>
+    </div>
+
+    <!-- Buscador de familiares -->
+    <div class="search-container">
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchPersonInput" placeholder="Buscar pariente por nombre o lugar..." autocomplete="off">
+      </div>
+      <div id="searchResultsDropdown" class="search-results-dropdown"></div>
+    </div>
+
+    <!-- Acciones principales -->
+    <div class="header-actions">
+      <button id="btnAddPerson" class="btn-primary" title="Añadir una nueva persona al árbol">
+        <span>+</span> Añadir Familiar
+      </button>
+
+      <div class="dropdown-actions">
+        <button id="btnExportJson" class="btn-secondary" title="Descargar la base de datos en formato JSON">
+          💾 Descargar JSON
+        </button>
+        <button id="btnImportJson" class="btn-secondary" title="Cargar un archivo JSON guardado">
+          📂 Cargar JSON
+        </button>
+        <input type="file" id="fileInputJson" accept=".json" style="display:none;">
+
+        <button id="btnRawJson" class="btn-secondary btn-icon" title="Ver y editar el JSON sin formato">
+          ⚙️ JSON
+        </button>
+        <button id="btnResetDefault" class="btn-ghost btn-icon" title="Restablecer datos de ejemplo">
+          ↺
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENEDOR PRINCIPAL -->
+  <main class="app-main">
+
+    <!-- ÁREA DEL ÁRBOL INTERACTIVO (CANVAS CON PAN & ZOOM) -->
+    <div id="treeContainerWrapper" class="tree-viewport">
+      <!-- Controles flotantes de Zoom y Posición -->
+      <div class="zoom-controls">
+        <button id="btnZoomIn" title="Acercar (+)">➕</button>
+        <button id="btnZoomOut" title="Alejar (-)">➖</button>
+        <button id="btnResetZoom" title="Restablecer vista centrada">⟲</button>
+        <div class="zoom-divider"></div>
+        <button id="btnExpandAll" title="Expandir árbol completo (antepasados, hermanos, cónyuges y descendencia)">🌳</button>
+        <button id="btnCollapseAll" title="Contraer a vista básica de 4 generaciones">🌿</button>
+        <button id="btnZoomToggleSiblings" class="active" title="Mostrar/ocultar hermanos de antepasados">👥</button>
+      </div>
+
+      <div class="canvas-instructions">
+        <span>💡 Arrastra para mover • Rueda para zoom • Clic en persona para detalles</span>
+      </div>
+
+      <!-- Lienzo dinámico transformable -->
+      <div id="treeCanvas" class="tree-canvas">
+        <svg id="treeConnections" class="tree-svg"></svg>
+        <div id="treeNodes" class="tree-nodes"></div>
+      </div>
+    </div>
+
+    <!-- ÁREA DE DIRECTORIO (TABLA / LISTA DE FAMILIARES) -->
+    <div id="directoryContainerWrapper" class="directory-viewport" style="display: none;">
+      <div class="directory-card">
+        <div class="directory-header">
+          <h2>Directorio de Miembros de la Familia</h2>
+          <p>Listado completo de todas las personas registradas en el árbol.</p>
+        </div>
+        <div class="directory-table-responsive">
+          <table class="directory-table">
+            <thead>
+              <tr>
+                <th>Nombre Completo</th>
+                <th>Género</th>
+                <th>Lugar de Nacimiento</th>
+                <th>Padres</th>
+                <th>Cónyuge / Pareja</th>
+                <th>Profesión</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="directoryTableBody">
+              <!-- Filas dinámicas -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DRAWER LATERAL: FICHA BIOGRÁFICA DETALLADA -->
+    <aside id="detailDrawer" class="detail-drawer">
+      <div class="drawer-header">
+        <button id="closeDetailDrawer" class="drawer-close" title="Cerrar ficha">&times;</button>
+        <div id="drawerAvatar" class="drawer-avatar-wrap"></div>
+        <h2 id="drawerName" class="drawer-name">Nombre Familiar</h2>
+        <div class="drawer-badges">
+          <span id="drawerGenderBadge" class="badge-gender">Hombre</span>
+          <span id="drawerAge" class="badge-age">Edad</span>
+        </div>
+      </div>
+
+      <div class="drawer-body">
+        <!-- Fechas y Lugares -->
+        <section class="drawer-section">
+          <h3 class="section-title">Datos Vitales</h3>
+          <div class="detail-row">
+            <span class="detail-label">👶 Nacimiento:</span>
+            <span id="drawerBirth" class="detail-val">--</span>
+          </div>
+          <div class="detail-row" id="drawerDeathRow" style="display:none;">
+            <span class="detail-label">⚰️ Fallecimiento:</span>
+            <span id="drawerDeath" class="detail-val">--</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">💼 Profesión:</span>
+            <span id="drawerProfession" class="detail-val">--</span>
+          </div>
+        </section>
+
+        <!-- Relaciones Directas -->
+        <section class="drawer-section">
+          <h3 class="section-title">Padres</h3>
+          <div class="relations-grid">
+            <div class="rel-box">
+              <span class="rel-type">Padre:</span>
+              <div id="drawerFather"></div>
+            </div>
+            <div class="rel-box">
+              <span class="rel-type">Madre:</span>
+              <div id="drawerMother"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 class="section-title">Pareja / Cónyuge</h3>
+          <div id="drawerSpouse"></div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 class="section-title">Hijos</h3>
+          <div id="drawerChildren" class="chips-list"></div>
+        </section>
+
+        <section class="drawer-section">
+          <h3 class="section-title">Hermanos/as</h3>
+          <div id="drawerSiblings" class="chips-list"></div>
+        </section>
+
+        <!-- Notas biográficas -->
+        <section class="drawer-section">
+          <h3 class="section-title">Notas Biográficas</h3>
+          <p id="drawerNotes" class="drawer-notes-text">Sin notas registradas.</p>
+        </section>
+      </div>
+
+      <!-- Barra de acciones del drawer -->
+      <div class="drawer-footer">
+        <button id="btnDrawerFocus" class="btn-drawer btn-focus" title="Centrar la vista del árbol en este pariente">
+          🎯 Centrar Árbol
+        </button>
+        <button id="btnDrawerSimultaneous" class="btn-drawer btn-simultaneous" title="Visualizar el árbol de este familiar a la vez">
+          👁️ Ver a la vez
+        </button>
+        <button id="btnDrawerEdit" class="btn-drawer btn-edit" title="Editar datos biográficos">
+          ✏️ Editar
+        </button>
+        <button id="btnDrawerDelete" class="btn-drawer btn-delete" title="Eliminar pariente">
+          🗑️ Eliminar
+        </button>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- MODAL: CREAR / EDITAR FAMILIAR -->
+  <div id="personModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="personModalTitle">Añadir Familiar</h2>
+        <button type="button" class="modal-close-btn">&times;</button>
+      </div>
+
+      <form id="personForm" class="modal-form">
+        <input type="hidden" id="formPersonId">
+
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label for="formNombre">Nombre *</label>
+            <input type="text" id="formNombre" required placeholder="Ej. Antonio">
+          </div>
+          <div class="form-group">
+            <label for="formApellidos">Apellidos</label>
+            <input type="text" id="formApellidos" placeholder="Ej. García López">
+          </div>
+        </div>
+
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label for="formGenero">Género</label>
+            <select id="formGenero">
+              <option value="M">Hombre (♂)</option>
+              <option value="F">Mujer (♀)</option>
+              <option value="X">Otro / Desconocido</option>
+            </select>
+          </div>
+          <div class="form-group form-checkbox-group">
+            <label class="checkbox-container">
+              <input type="checkbox" id="formVive" checked>
+              <span class="checkmark"></span>
+              ¿Actualmente con vida?
+            </label>
+          </div>
+        </div>
+
+        <div class="form-section-divider">Nacimiento</div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label for="formFechaNacimiento">Fecha de Nacimiento</label>
+            <input type="date" id="formFechaNacimiento">
+          </div>
+          <div class="form-group">
+            <label for="formLugarNacimiento">Lugar de Nacimiento</label>
+            <input type="text" id="formLugarNacimiento" placeholder="Ej. Toledo, España">
+          </div>
+        </div>
+
+        <!-- Campos de Fallecimiento (Ocultos si vive) -->
+        <div id="deathFieldsGroup" class="form-row form-row-2" style="display: none;">
+          <div class="form-group">
+            <label for="formFechaFallecimiento">Fecha de Fallecimiento</label>
+            <input type="date" id="formFechaFallecimiento">
+          </div>
+          <div class="form-group">
+            <label for="formLugarFallecimiento">Lugar de Fallecimiento</label>
+            <input type="text" id="formLugarFallecimiento" placeholder="Ej. Madrid, España">
+          </div>
+        </div>
+
+        <div class="form-section-divider">Vínculos de Parentesco</div>
+        <div class="form-row form-row-3">
+          <div class="form-group">
+            <label for="formPadreId">Padre</label>
+            <select id="formPadreId">
+              <option value="">-- Ninguno / Desconocido --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="formMadreId">Madre</label>
+            <select id="formMadreId">
+              <option value="">-- Ninguna / Desconocida --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="formParejaId">Cónyuge / Pareja</label>
+            <select id="formParejaId">
+              <option value="">-- Ninguna --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-section-divider">Foto y Biografía</div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label for="formProfesion">Profesión / Oficio</label>
+            <input type="text" id="formProfesion" placeholder="Ej. Maestro, Carpintero...">
+          </div>
+          <div class="form-group">
+            <label>Fotografía (URL o Subir)</label>
+            <div class="photo-input-combo">
+              <input type="text" id="formFoto" placeholder="URL de la imagen...">
+              <label class="btn-upload-label" title="Subir desde el equipo">
+                📁 Subir
+                <input type="file" id="formPhotoFile" accept="image/*" style="display:none;">
+              </label>
+            </div>
+            <img id="formPhotoPreview" class="form-photo-preview" style="display:none;" alt="Vista previa">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="formNotas">Notas Biográficas / Anécdotas</label>
+          <textarea id="formNotas" rows="3" placeholder="Información sobre su vida, logros, recuerdos..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary btn-modal-cancel">Cancelar</button>
+          <button type="submit" class="btn-primary">Guardar Familiar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITOR JSON CRUDO -->
+  <div id="rawJsonModal" class="modal-overlay">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <h2>Editor de Archivo JSON Directo</h2>
+        <button type="button" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body-json">
+        <p class="json-editor-help">
+          Puedes editar manualmente la estructura completa de tu árbol genealógico en formato JSON o copiarla para usarla en un archivo de texto como <code>arbol_ejemplo.json</code>.
+        </p>
+        <textarea id="rawJsonTextarea" spellcheck="false"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btnCopyJson" class="btn-secondary">📋 Copiar al Portapapeles</button>
+        <button type="button" class="btn-secondary btn-modal-cancel">Cerrar</button>
+        <button type="button" id="btnApplyJson" class="btn-primary">Validar y Aplicar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICACIONES -->
+  <div id="appToast" class="app-toast"></div>
+
+  <!-- SCRIPTS -->
+  <script src="js/data.js"></script>
+  <script src="js/tree.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
