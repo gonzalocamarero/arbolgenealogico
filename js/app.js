@@ -197,6 +197,13 @@ class GenealogyApp {
       this.exportToJsonFile();
     });
 
+    const btnExportGedcom = document.getElementById('btnExportGedcom');
+    if (btnExportGedcom) {
+      btnExportGedcom.addEventListener('click', () => {
+        this.exportToTraditionalGedcomFile();
+      });
+    }
+
     const btnExportGedcomX = document.getElementById('btnExportGedcomX');
     if (btnExportGedcomX) {
       btnExportGedcomX.addEventListener('click', () => {
@@ -882,6 +889,211 @@ class GenealogyApp {
     this.showToast('Archivo JSON descargado');
   }
 
+  // ==========================================
+  // EXPORTACIÓN A GEDCOM ESTÁNDAR (.ged 5.5.1)
+  // ==========================================
+  exportToTraditionalGedcomFile() {
+    const gedcomText = this.convertToTraditionalGedcom(this.treeData);
+    const blob = new Blob([gedcomText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeTitle = (this.treeData.config && this.treeData.config.titulo)
+      ? this.treeData.config.titulo.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 25)
+      : 'arbol_genealogico';
+    const today = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `${safeTitle}_${today}.ged`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    this.showToast('Árbol exportado en formato estándar internacional GEDCOM (.ged 5.5.1)');
+  }
+
+  convertToTraditionalGedcom(treeData) {
+    const personas = treeData.personas || [];
+    const lines = [];
+
+    const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const formatGedDate = (dStr) => {
+      if (!dStr) return '';
+      dStr = String(dStr).trim();
+      const mIso = dStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (mIso) {
+        const y = parseInt(mIso[1], 10);
+        const m = parseInt(mIso[2], 10) - 1;
+        const d = parseInt(mIso[3], 10);
+        return `${d} ${MONTHS[m] || 'JAN'} ${y}`;
+      }
+      const mYm = dStr.match(/^(\d{4})-(\d{2})$/);
+      if (mYm) {
+        const y = parseInt(mYm[1], 10);
+        const m = parseInt(mYm[2], 10) - 1;
+        return `${MONTHS[m] || 'JAN'} ${y}`;
+      }
+      return dStr;
+    };
+
+    // 1. Cabecera GEDCOM 5.5.1
+    const now = new Date();
+    const day = now.getDate();
+    const mon = MONTHS[now.getMonth()];
+    const yr = now.getFullYear();
+    lines.push('0 HEAD');
+    lines.push('1 SOUR ArbolGenealogico');
+    lines.push('2 VERS 1.0');
+    lines.push('2 NAME Mi Arbol Genealogico');
+    lines.push('1 DEST ANY');
+    lines.push(`1 DATE ${day} ${mon} ${yr}`);
+    lines.push('1 SUBM @SUBM1@');
+    lines.push('1 GEDC');
+    lines.push('2 VERS 5.5.1');
+    lines.push('2 FORM LINEAGE-LINKED');
+    lines.push('1 CHAR UTF-8');
+    lines.push('0 @SUBM1@ SUBM');
+    lines.push('1 NAME Usuario');
+
+    // Mapeo unívoco de ID a identificadores GEDCOM @I1@, @I2@...
+    const personGedIdMap = new Map();
+    personas.forEach((p, idx) => {
+      personGedIdMap.set(String(p.id), `@I${idx + 1}@`);
+    });
+
+    // 2. Construcción de familias (@F1@, @F2@...)
+    const families = [];
+    const famKeyMap = new Map();
+    let famCounter = 1;
+
+    const getOrCreateFamily = (fatherId, motherId) => {
+      const fId = fatherId ? String(fatherId) : '';
+      const mId = motherId ? String(motherId) : '';
+      if (!fId && !mId) return null;
+
+      const key = `${fId}_${mId}`;
+      if (famKeyMap.has(key)) return famKeyMap.get(key);
+
+      const famId = `@F${famCounter++}@`;
+      const fam = {
+        id: famId,
+        husb: fId ? personGedIdMap.get(fId) : null,
+        wife: mId ? personGedIdMap.get(mId) : null,
+        children: [],
+        isMarriage: !!(fId && mId)
+      };
+      families.push(fam);
+      famKeyMap.set(key, fam);
+      if (fId && mId) famKeyMap.set(`${mId}_${fId}`, fam);
+      return fam;
+    };
+
+    // Familias con descendientes
+    personas.forEach(p => {
+      if (p.padreId || p.madreId) {
+        const fam = getOrCreateFamily(p.padreId, p.madreId);
+        if (fam) fam.children.push(personGedIdMap.get(String(p.id)));
+      }
+    });
+
+    // Familias conyugales sin hijos
+    personas.forEach(p => {
+      if (p.parejaId) {
+        const p1 = p;
+        const p2 = personas.find(x => String(x.id) === String(p.parejaId));
+        if (p2) {
+          const fId = (p1.genero === 'F' && p2.genero === 'M') ? p2.id : p1.id;
+          const mId = (p1.genero === 'F' && p2.genero === 'M') ? p1.id : p2.id;
+          getOrCreateFamily(fId, mId);
+        }
+      }
+    });
+
+    const personFamc = new Map();
+    const personFams = new Map();
+
+    families.forEach(f => {
+      f.children.forEach(cId => {
+        if (!personFamc.has(cId)) personFamc.set(cId, f.id);
+      });
+      if (f.husb) {
+        if (!personFams.has(f.husb)) personFams.set(f.husb, new Set());
+        personFams.get(f.husb).add(f.id);
+      }
+      if (f.wife) {
+        if (!personFams.has(f.wife)) personFams.set(f.wife, new Set());
+        personFams.get(f.wife).add(f.id);
+      }
+    });
+
+    // 3. Registros de Individuos (INDI)
+    personas.forEach(p => {
+      const gedId = personGedIdMap.get(String(p.id));
+      lines.push(`0 ${gedId} INDI`);
+
+      const nombre = (p.nombre || '').trim();
+      const apellidos = (p.apellidos || '').trim();
+      lines.push(`1 NAME ${nombre} /${apellidos}/`.trim());
+      if (nombre) lines.push(`2 GIVN ${nombre}`);
+      if (apellidos) lines.push(`2 SURN ${apellidos}`);
+
+      let sex = 'U';
+      if (p.genero === 'M') sex = 'M';
+      else if (p.genero === 'F') sex = 'F';
+      lines.push(`1 SEX ${sex}`);
+
+      if (p.fechaNacimiento || p.lugarNacimiento) {
+        lines.push('1 BIRT');
+        if (p.fechaNacimiento) lines.push(`2 DATE ${formatGedDate(p.fechaNacimiento)}`);
+        if (p.lugarNacimiento) lines.push(`2 PLAC ${p.lugarNacimiento.trim()}`);
+      }
+
+      if (p.vive === false || p.fechaFallecimiento || p.lugarFallecimiento) {
+        lines.push('1 DEAT');
+        if (p.fechaFallecimiento) lines.push(`2 DATE ${formatGedDate(p.fechaFallecimiento)}`);
+        if (p.lugarFallecimiento) lines.push(`2 PLAC ${p.lugarFallecimiento.trim()}`);
+        if (!p.fechaFallecimiento && !p.lugarFallecimiento) lines.push('2 DATE Y');
+      }
+
+      if (p.profesion) {
+        lines.push(`1 OCCU ${p.profesion.trim()}`);
+      }
+
+      if (p.notas) {
+        const noteLines = p.notas.split('\n');
+        noteLines.forEach((nl, nIdx) => {
+          if (nIdx === 0) lines.push(`1 NOTE ${nl}`);
+          else lines.push(`2 CONT ${nl}`);
+        });
+      }
+
+      if (personFamc.has(gedId)) {
+        lines.push(`1 FAMC ${personFamc.get(gedId)}`);
+      }
+
+      if (personFams.has(gedId)) {
+        personFams.get(gedId).forEach(fId => {
+          lines.push(`1 FAMS ${fId}`);
+        });
+      }
+    });
+
+    // 4. Registros de Familias (FAM)
+    families.forEach(f => {
+      lines.push(`0 ${f.id} FAM`);
+      if (f.husb) lines.push(`1 HUSB ${f.husb}`);
+      if (f.wife) lines.push(`1 WIFE ${f.wife}`);
+      f.children.forEach(cId => {
+        lines.push(`1 CHIL ${cId}`);
+      });
+      if (f.isMarriage) {
+        lines.push('1 MARR');
+      }
+    });
+
+    // 5. Fin de archivo GEDCOM
+    lines.push('0 TRLR');
+    return lines.join('\n');
+  }
+
   exportToGedcomXFile() {
     const gedcomXData = this.convertToGedcomX(this.treeData);
     const dataStr = JSON.stringify(gedcomXData, null, 2);
@@ -1130,40 +1342,267 @@ class GenealogyApp {
     };
   }
 
+  // ==========================================
+  // PARSER DE GEDCOM ESTÁNDAR (.ged 5.5.1 / 7.0)
+  // ==========================================
+  parseTraditionalGedcom(content) {
+    if (!content || !content.trim()) throw new Error('El archivo GEDCOM está vacío.');
+
+    const monthMap = {
+      'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+      'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12',
+      'ENE': '01', 'ABR': '04', 'AGO': '08', 'DIC': '12'
+    };
+
+    const parseGedDate = (str) => {
+      if (!str) return '';
+      str = str.trim();
+      const upper = str.toUpperCase().replace(/^(ABT|CAL|EST|BEF|AFT|CIRCA|CA\.?|BET|FROM)\s+/i, '');
+      
+      const dmy = upper.match(/^(\d{1,2})\s+([A-Z]{3,4})\s+(\d{4})$/);
+      if (dmy) {
+        const day = dmy[1].padStart(2, '0');
+        const mon = monthMap[dmy[2].slice(0, 3)] || '01';
+        const yr = dmy[3];
+        return `${yr}-${mon}-${day}`;
+      }
+
+      const my = upper.match(/^([A-Z]{3,4})\s+(\d{4})$/);
+      if (my) {
+        const mon = monthMap[my[1].slice(0, 3)] || '01';
+        const yr = my[2];
+        return `${yr}-${mon}`;
+      }
+
+      const y = upper.match(/\b(\d{4})\b/);
+      if (y) return y[1];
+
+      return str;
+    };
+
+    const text = content.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const rawLines = text.split('\n');
+
+    const rootRecords = [];
+    const stack = [];
+
+    for (let line of rawLines) {
+      line = line.trim();
+      if (!line) continue;
+
+      const m = line.match(/^(\d+)\s+(?:(@[^@]+@)\s+)?([A-Za-z0-9_]+)(?:\s+(.*))?$/);
+      if (!m) continue;
+
+      const level = parseInt(m[1], 10);
+      const xref = m[2] || null;
+      const tag = (m[3] || '').toUpperCase();
+      const value = m[4] !== undefined ? m[4].trim() : '';
+
+      const node = { level, xref, tag, value, children: [] };
+
+      if (level === 0) {
+        rootRecords.push(node);
+        stack.length = 0;
+        stack.push(node);
+      } else {
+        while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+          stack.pop();
+        }
+        if (stack.length > 0) {
+          const parent = stack[stack.length - 1];
+          if (tag === 'CONC') {
+            parent.value = (parent.value || '') + value;
+          } else if (tag === 'CONT') {
+            parent.value = (parent.value || '') + '\n' + value;
+          } else {
+            parent.children.push(node);
+            stack.push(node);
+          }
+        }
+      }
+    }
+
+    const indiNodes = rootRecords.filter(r => r.tag === 'INDI' || (r.xref && r.value === 'INDI'));
+    const famNodes = rootRecords.filter(r => r.tag === 'FAM' || (r.xref && r.value === 'FAM'));
+
+    const peopleMap = new Map();
+
+    indiNodes.forEach(ind => {
+      const rawId = ind.xref || ind.tag;
+      const id = rawId.replace(/@/g, '');
+
+      let nombre = '';
+      let apellidos = '';
+      let genero = 'O';
+      let fechaNacimiento = '';
+      let lugarNacimiento = '';
+      let vive = true;
+      let fechaFallecimiento = '';
+      let lugarFallecimiento = '';
+      let profesion = '';
+      let notas = '';
+
+      ind.children.forEach(c => {
+        if (c.tag === 'NAME') {
+          const fullVal = c.value || '';
+          const matchSurname = fullVal.match(/\/([^/]*)\//);
+          if (matchSurname) {
+            apellidos = matchSurname[1].trim();
+            nombre = fullVal.replace(/\/[^/]*\//, '').trim();
+          } else {
+            nombre = fullVal.trim();
+          }
+
+          c.children.forEach(sub => {
+            if (sub.tag === 'GIVN' && sub.value) nombre = sub.value.trim();
+            if (sub.tag === 'SURN' && sub.value) apellidos = sub.value.trim();
+          });
+        } else if (c.tag === 'SEX') {
+          const s = (c.value || '').toUpperCase();
+          if (s.startsWith('M')) genero = 'M';
+          else if (s.startsWith('F')) genero = 'F';
+          else genero = 'O';
+        } else if (c.tag === 'BIRT') {
+          c.children.forEach(sub => {
+            if (sub.tag === 'DATE') fechaNacimiento = parseGedDate(sub.value);
+            if (sub.tag === 'PLAC') lugarNacimiento = sub.value.trim();
+          });
+        } else if (c.tag === 'DEAT') {
+          vive = false;
+          c.children.forEach(sub => {
+            if (sub.tag === 'DATE') {
+              if (sub.value && sub.value.toUpperCase() !== 'Y') {
+                fechaFallecimiento = parseGedDate(sub.value);
+              }
+            }
+            if (sub.tag === 'PLAC') lugarFallecimiento = sub.value.trim();
+          });
+        } else if (c.tag === 'OCCU') {
+          profesion = c.value.trim();
+        } else if (c.tag === 'NOTE') {
+          notas = (notas ? notas + '\n' : '') + (c.value || '').trim();
+        }
+      });
+
+      if (fechaNacimiento && vive) {
+        const y = parseInt(fechaNacimiento.slice(0, 4), 10);
+        if (y && (new Date().getFullYear() - y > 115)) {
+          vive = false;
+        }
+      }
+
+      peopleMap.set(id, {
+        id,
+        nombre: nombre || 'Sin nombre',
+        apellidos: apellidos || '',
+        genero,
+        fechaNacimiento,
+        lugarNacimiento,
+        vive,
+        fechaFallecimiento,
+        lugarFallecimiento,
+        profesion,
+        padreId: null,
+        madreId: null,
+        parejaId: null,
+        foto: '',
+        notas
+      });
+    });
+
+    famNodes.forEach(fam => {
+      let husbId = null;
+      let wifeId = null;
+      const childrenIds = [];
+
+      fam.children.forEach(c => {
+        const cleanVal = (c.value || '').replace(/@/g, '');
+        if (c.tag === 'HUSB') husbId = cleanVal;
+        else if (c.tag === 'WIFE') wifeId = cleanVal;
+        else if (c.tag === 'CHIL') childrenIds.push(cleanVal);
+      });
+
+      childrenIds.forEach(cId => {
+        const child = peopleMap.get(cId);
+        if (child) {
+          if (husbId && peopleMap.has(husbId)) child.padreId = husbId;
+          if (wifeId && peopleMap.has(wifeId)) child.madreId = wifeId;
+        }
+      });
+
+      if (husbId && wifeId) {
+        const h = peopleMap.get(husbId);
+        const w = peopleMap.get(wifeId);
+        if (h && w) {
+          if (!h.parejaId) h.parejaId = wifeId;
+          if (!w.parejaId) w.parejaId = husbId;
+        }
+      }
+    });
+
+    const personas = Array.from(peopleMap.values());
+    if (personas.length === 0) {
+      throw new Error('No se encontraron registros de personas (INDI) en el archivo GEDCOM.');
+    }
+
+    // Persona raíz: preferir personas que tengan descendientes o antepasados
+    let personaRaizId = personas[0].id;
+    const connectedPerson = personas.find(p => (p.padreId || p.madreId) && p.parejaId);
+    if (connectedPerson) personaRaizId = connectedPerson.id;
+
+    return {
+      config: {
+        titulo: 'Árbol Genealógico Importado (GEDCOM)',
+        personaRaizId
+      },
+      personas
+    };
+  }
+
   handleFileImport(event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    const fileName = (file.name || '').toLowerCase();
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const parsed = JSON.parse(e.target.result);
+        const text = e.target.result;
         let finalData = null;
-        let isGedcomX = false;
+        let formatLabel = '';
 
-        if (parsed && Array.isArray(parsed.personas)) {
-          // Formato estándar de la aplicación
-          finalData = parsed;
-        } else if (parsed && Array.isArray(parsed.persons)) {
-          // Formato internacional GEDCOM X
-          finalData = this.parseGedcomX(parsed);
-          isGedcomX = true;
+        const trimmed = (text || '').trim();
+        const isLikelyJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+        const isGedcom = fileName.endsWith('.ged') || fileName.endsWith('.gedcom') || trimmed.startsWith('0 ') || trimmed.includes('INDI');
+
+        if (isLikelyJson && !isGedcom) {
+          const parsed = JSON.parse(text);
+          if (parsed && Array.isArray(parsed.personas)) {
+            finalData = parsed;
+            formatLabel = 'en formato JSON de la aplicación';
+          } else if (parsed && Array.isArray(parsed.persons)) {
+            finalData = this.parseGedcomX(parsed);
+            formatLabel = 'en formato internacional GEDCOM X (JSON)';
+          } else {
+            alert('El archivo JSON no tiene un formato válido (debe contener "personas" o formato estándar GEDCOM X con "persons").');
+            return;
+          }
         } else {
-          alert('El archivo JSON no tiene un formato válido (debe ser formato de la aplicación con "personas" o formato estándar GEDCOM X con "persons").');
-          return;
+          // Parsear como estándar internacional GEDCOM (.ged)
+          finalData = this.parseTraditionalGedcom(text);
+          formatLabel = 'en estándar internacional GEDCOM (.ged 5.5.1)';
         }
 
-        const formatLabel = isGedcomX ? 'en formato estándar GEDCOM X' : 'en formato JSON';
         if (confirm(`Se han detectado ${finalData.personas.length} personas ${formatLabel}. ¿Deseas reemplazar el árbol actual con estos datos?`)) {
           this.treeData = finalData;
           this.saveToLocalStorage();
           this.treeRenderer.setData(this.treeData);
           this.renderDirectoryList();
           this.updateStats();
-          this.showToast(`Se cargaron ${finalData.personas.length} personas con éxito (${isGedcomX ? 'GEDCOM X' : 'JSON'})`);
+          this.showToast(`Se cargaron ${finalData.personas.length} personas con éxito (${formatLabel})`);
         }
       } catch (err) {
-        alert('Error al leer el archivo JSON: ' + err.message);
+        alert('Error al leer el archivo: ' + err.message);
       }
     };
     reader.readAsText(file);

@@ -67,13 +67,16 @@
         <button id="btnExportJson" class="btn-secondary" title="Descargar la base de datos en formato JSON interno">
           💾 JSON
         </button>
-        <button id="btnExportGedcomX" class="btn-secondary" title="Exportar la base de datos completa en estándar internacional GEDCOM X (JSON)">
+        <button id="btnExportGedcom" class="btn-secondary" title="Exportar la base de datos completa en estándar internacional GEDCOM 5.5.1 (.ged)">
+          📜 GEDCOM (.ged)
+        </button>
+        <button id="btnExportGedcomX" class="btn-secondary" title="Exportar la base de datos completa en estándar moderno GEDCOM X (JSON)">
           📜 GEDCOM X
         </button>
-        <button id="btnImportJson" class="btn-secondary" title="Cargar un archivo JSON guardado o archivo estándar GEDCOM X">
+        <button id="btnImportJson" class="btn-secondary" title="Cargar un archivo JSON guardado o archivo estándar GEDCOM (.ged / GEDCOM X)">
           📂 Cargar
         </button>
-        <input type="file" id="fileInputJson" accept=".json" style="display:none;">
+        <input type="file" id="fileInputJson" accept=".json,.ged,.gedcom" style="display:none;">
 
         <button id="btnRawJson" class="btn-secondary btn-icon" title="Ver y editar el JSON sin formato">
           ⚙️ JSON
@@ -99,10 +102,24 @@
         <button id="btnExpandAll" title="Expandir árbol completo (antepasados, hermanos, cónyuges y descendencia)">🌳</button>
         <button id="btnCollapseAll" title="Contraer a vista básica de 4 generaciones">🌿</button>
         <button id="btnZoomToggleSiblings" class="active" title="Mostrar/ocultar hermanos de antepasados">👥</button>
+        <div class="zoom-divider"></div>
+        <button id="btnToggleMinimap" class="active" title="Mostrar u ocultar el minimapa de navegación (radar)">🗺️</button>
       </div>
 
       <div class="canvas-instructions">
         <span>💡 Arrastra para mover • Rueda para zoom • Clic en persona para detalles</span>
+      </div>
+
+      <!-- Minimapa de Navegación Flotante (Radar / Vista de Pájaro) -->
+      <div id="treeMinimap" class="tree-minimap" title="Minimapa de navegación">
+        <div class="minimap-header" id="minimapHeader">
+          <span class="minimap-title">🗺️ Radar</span>
+          <button id="btnMinimapMinimize" class="minimap-btn-minimize" title="Minimizar / Expandir radar">▾</button>
+        </div>
+        <div class="minimap-content" id="minimapContent">
+          <canvas id="minimapCanvas" class="minimap-canvas" width="220" height="150"></canvas>
+          <div id="minimapViewportIndicator" class="minimap-viewport-indicator" title="Área visible en pantalla (arrastra para desplazarte)"></div>
+        </div>
       </div>
 
       <!-- Lienzo dinámico transformable -->

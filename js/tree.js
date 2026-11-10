@@ -39,8 +39,14 @@ class TreeRenderer {
     this.expandedSiblingFamilyIds = new Set(); // Cónyuges e hijos expandidos individualmente por tarjeta
     this.collapsedSiblingFamilyIds = new Set(); // Control de colapso individual cuando está activo globalmente
     
+    // Estado y controles del Minimapa (Radar)
+    this.showMinimap = true;
+    this.isMinimapMinimized = false;
+    this.minimapTransform = null;
+
     this.initEvents();
     this.initTooltip();
+    this.initMinimap();
     this.updateTransform();
   }
 
@@ -210,9 +216,245 @@ class TreeRenderer {
     }
   }
 
+  // ==========================================
+  // MINIMAPA DE NAVEGACIÓN FLOTANTE (RADAR)
+  // ==========================================
+  initMinimap() {
+    this.minimapContainer = document.getElementById('treeMinimap');
+    this.minimapCanvas = document.getElementById('minimapCanvas');
+    this.minimapIndicator = document.getElementById('minimapViewportIndicator');
+    this.minimapContent = document.getElementById('minimapContent');
+    const header = document.getElementById('minimapHeader');
+    const btnMin = document.getElementById('btnMinimapMinimize');
+    const btnToggle = document.getElementById('btnToggleMinimap');
+
+    if (!this.minimapContainer || !this.minimapCanvas || !this.minimapIndicator) return;
+    this.minimapCtx = this.minimapCanvas.getContext('2d');
+
+    // Minimizar / expandir minimapa desde la cabecera o botón de minimizar
+    const toggleMinimize = (e) => {
+      e.stopPropagation();
+      this.isMinimapMinimized = !this.isMinimapMinimized;
+      this.minimapContainer.classList.toggle('minimized', this.isMinimapMinimized);
+      if (btnMin) btnMin.textContent = this.isMinimapMinimized ? '▴' : '▾';
+      if (!this.isMinimapMinimized) {
+        this.drawMinimap();
+      }
+    };
+
+    if (header) header.addEventListener('click', toggleMinimize);
+    if (btnMin) btnMin.addEventListener('click', toggleMinimize);
+
+    // Botón en la barra de zoom para ocultar/mostrar completamente
+    if (btnToggle) {
+      btnToggle.addEventListener('click', () => {
+        this.showMinimap = !this.showMinimap;
+        this.minimapContainer.classList.toggle('hidden', !this.showMinimap);
+        btnToggle.classList.toggle('active', this.showMinimap);
+        if (this.showMinimap) {
+          this.drawMinimap();
+        }
+      });
+    }
+
+    // Clic en el lienzo del minimapa para centrar el árbol en esa posición
+    if (this.minimapContent) {
+      this.minimapContent.addEventListener('click', (e) => {
+        if (e.target === this.minimapIndicator) return;
+        if (!this.minimapTransform) return;
+
+        const rect = this.minimapCanvas.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        const { scale, offsetX, offsetY } = this.minimapTransform;
+        const targetTreeX = (clickX - offsetX) / scale;
+        const targetTreeY = (clickY - offsetY) / scale;
+
+        const viewportW = this.container.clientWidth;
+        const viewportH = this.container.clientHeight;
+
+        this.translateX = (viewportW / 2) - targetTreeX * this.scale;
+        this.translateY = (viewportH / 2) - targetTreeY * this.scale;
+        this.updateTransform();
+      });
+    }
+
+    // Arrastrar el indicador visual de ventana del minimapa
+    let isDraggingIndicator = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let initialTx = 0;
+    let initialTy = 0;
+
+    this.minimapIndicator.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (!this.minimapTransform) return;
+
+      isDraggingIndicator = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      initialTx = this.translateX;
+      initialTy = this.translateY;
+      document.body.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDraggingIndicator || !this.minimapTransform) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+
+      const { scale } = this.minimapTransform;
+      this.translateX = initialTx - (dx / scale) * this.scale;
+      this.translateY = initialTy - (dy / scale) * this.scale;
+      this.updateTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDraggingIndicator) {
+        isDraggingIndicator = false;
+        document.body.style.cursor = '';
+      }
+    });
+
+    // Mantener sincronizado al cambiar el tamaño de ventana
+    window.addEventListener('resize', () => {
+      if (this.showMinimap && !this.isMinimapMinimized) {
+        this.updateMinimapIndicator();
+      }
+    });
+  }
+
+  drawMinimap() {
+    if (!this.showMinimap || this.isMinimapMinimized || !this.minimapCanvas || !this.minimapCtx) return;
+
+    const cards = Array.from(this.nodesContainer.querySelectorAll('.person-card'));
+    const canvasW = this.minimapCanvas.width;
+    const canvasH = this.minimapCanvas.height;
+    const ctx = this.minimapCtx;
+
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    if (cards.length === 0) {
+      this.minimapTransform = null;
+      if (this.minimapIndicator) this.minimapIndicator.style.display = 'none';
+      return;
+    }
+
+    if (this.minimapIndicator) this.minimapIndicator.style.display = 'block';
+
+    const cardW = this.options.cardWidth;
+    const cardH = this.options.cardHeight;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    cards.forEach(c => {
+      const x = parseFloat(c.style.left) || 0;
+      const y = parseFloat(c.style.top) || 0;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + cardW > maxX) maxX = x + cardW;
+      if (y + cardH > maxY) maxY = y + cardH;
+    });
+
+    const pad = 120;
+    minX -= pad;
+    minY -= pad;
+    maxX += pad;
+    maxY += pad;
+
+    const treeW = Math.max(maxX - minX, 400);
+    const treeH = Math.max(maxY - minY, 300);
+
+    const scale = Math.min(canvasW / treeW, canvasH / treeH);
+    const drawW = treeW * scale;
+    const drawH = treeH * scale;
+    const offsetX = (canvasW - drawW) / 2 - (minX * scale);
+    const offsetY = (canvasH - drawH) / 2 - (minY * scale);
+
+    this.minimapTransform = { scale, offsetX, offsetY, minX, minY, maxX, maxY };
+
+    // 1. Dibujar líneas de conexión del árbol a escala
+    const svgElements = Array.from(this.svg.querySelectorAll('path, line'));
+    if (svgElements.length > 0 && typeof Path2D !== 'undefined') {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      svgElements.forEach(el => {
+        if (el.tagName === 'line') {
+          const x1 = parseFloat(el.getAttribute('x1')) || 0;
+          const y1 = parseFloat(el.getAttribute('y1')) || 0;
+          const x2 = parseFloat(el.getAttribute('x2')) || 0;
+          const y2 = parseFloat(el.getAttribute('y2')) || 0;
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.lineWidth = Math.max(1.5 / scale, 1.2);
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        } else if (el.tagName === 'path') {
+          const d = el.getAttribute('d');
+          if (d) {
+            const isCouple = el.classList.contains('tree-connector-couple');
+            ctx.strokeStyle = isCouple ? '#fcd34d' : '#cbd5e1';
+            ctx.lineWidth = Math.max((isCouple ? 2.5 : 1.8) / scale, 1.2);
+            ctx.stroke(new Path2D(d));
+          }
+        }
+      });
+      ctx.restore();
+    }
+
+    // 2. Dibujar píldoras en miniatura de cada persona
+    cards.forEach(c => {
+      const x = parseFloat(c.style.left) || 0;
+      const y = parseFloat(c.style.top) || 0;
+      const mx = x * scale + offsetX;
+      const my = y * scale + offsetY;
+      const mw = Math.max(cardW * scale, 7);
+      const mh = Math.max(cardH * scale, 3.5);
+
+      const isRoot = c.classList.contains('card-primary-person');
+      const isFemale = c.classList.contains('gender-f');
+      const isMale = c.classList.contains('gender-m');
+
+      ctx.fillStyle = isRoot ? '#10b981' : (isFemale ? '#ec4899' : (isMale ? '#3b82f6' : '#8b5cf6'));
+      this.drawCanvasRoundedRect(ctx, mx, my, mw, mh, 1.5, true, false);
+    });
+
+    this.updateMinimapIndicator();
+  }
+
+  updateMinimapIndicator() {
+    if (!this.minimapTransform || !this.minimapIndicator) return;
+    const { scale, offsetX, offsetY } = this.minimapTransform;
+
+    const viewportW = this.container.clientWidth;
+    const viewportH = this.container.clientHeight;
+
+    const treeViewX1 = -this.translateX / this.scale;
+    const treeViewY1 = -this.translateY / this.scale;
+    const treeViewX2 = (-this.translateX + viewportW) / this.scale;
+    const treeViewY2 = (-this.translateY + viewportH) / this.scale;
+
+    const indX = treeViewX1 * scale + offsetX;
+    const indY = treeViewY1 * scale + offsetY;
+    const indW = (treeViewX2 - treeViewX1) * scale;
+    const indH = (treeViewY2 - treeViewY1) * scale;
+
+    this.minimapIndicator.style.left = `${indX}px`;
+    this.minimapIndicator.style.top = `${indY}px`;
+    this.minimapIndicator.style.width = `${Math.max(indW, 8)}px`;
+    this.minimapIndicator.style.height = `${Math.max(indH, 6)}px`;
+  }
+
   updateTransform() {
     this.hideCardTooltip();
     this.canvas.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+    this.updateMinimapIndicator();
   }
 
   zoomAtPoint(factor, clientX, clientY) {
@@ -648,6 +890,9 @@ class TreeRenderer {
     this.svg.setAttribute('width', '25000');
     this.svg.setAttribute('height', '25000');
     this.svg.style.overflow = 'visible';
+
+    // Actualizar vista general en el minimapa (radar)
+    this.drawMinimap();
   }
 
   // ==========================================

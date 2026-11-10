@@ -18,6 +18,7 @@ No necesitas instalar servidores, dependencias de Node.js ni bases de datos:
 
 ### 1. Visualización Interactiva (Estilo FamilySearch)
 * **Vista Pedigrí (Ascendientes):** Centra una persona y muestra sus ramas familiares hacia atrás (Padres, Abuelos, Bisabuelos...) mediante curvas bezier suaves y tarjetas biográficas.
+* **🗺️ Minimapa de Navegación Flotante (Radar):** Un mapa en miniatura en la esquina inferior que muestra la silueta completa del árbol y un rectángulo interactivo que representa tu ventana visible en tiempo real. Permite hacer clic para saltar a cualquier punto o arrastrar el indicador para desplazarte con fluidez por árboles gigantes. Se puede minimizar o activar/desactivar con el botón `[🗺️]`.
 * **Ranuras para añadir parientes vacíos:** Si falta el padre o la madre de alguien, verás una tarjeta punteada con un botón directo `+ Añadir Padre` o `+ Añadir Madre`.
 * **Navegación infinita:** Las flechas `➔` en bisabuelos te permiten avanzar indefinidamente hacia generaciones más lejanas convirtiéndolos en la nueva persona central con un solo clic.
 * **Hermanos y Ramas Colaterales Completas:** Visualiza los hermanos de cualquier antepasado (`👥 Hermanos`), así como sus cónyuges e hijos colaterales (`👨‍👩‍👧‍👦`) con corchetes conyugales y uniones genealógicas limpias.
@@ -39,13 +40,14 @@ No necesitas instalar servidores, dependencias de Node.js ni bases de datos:
   * **Fotografías:** Puedes poner la URL de una foto en internet o **subir una imagen desde tu ordenador** (se almacena de forma segura en Base64 dentro del mismo archivo JSON).
 * **Ficha biográfica lateral (Drawer):** Haz clic en cualquier familiar para abrir su ficha completa con cálculo automático de edad, lista interactiva de padres, cónyuge, hijos y hermanos.
 
-### 3. Total Control, Exportación e Interoperabilidad (GEDCOM X, Imagen PNG, PDF y JSON)
+### 3. Total Control, Exportación e Interoperabilidad (GEDCOM .ged, GEDCOM X, Imagen PNG, PDF y JSON)
 * **Guardado automático local:** Todos tus cambios se guardan al instante en el `localStorage` de tu navegador para que nunca pierdas nada al recargar o cerrar la pestaña.
-* **📜 Exportar GEDCOM X:** Exporta toda la base de datos en el estándar internacional **GEDCOM X (JSON)** (`http://gedcomx.org/`), el formato estándar moderno utilizado por **FamilySearch**, gramps, RootsMagic y las principales herramientas genealógicas del mundo. Incluye personas, géneros, nombres desglosados en nombre de pila y apellidos, hechos de nacimiento/defunción, ocupaciones y relaciones completas de parentesco (`ParentChild` y `Couple`).
+* **📜 GEDCOM Tradicional (`.ged` 5.5.1 / 7.0):** Compatibilidad total con el estándar histórico universal de la genealogía. Exporta e importa archivos `.ged` compatibles con **MyHeritage, Geneanet, Ancestry, FamilySearch, Gramps, RootsMagic y Family Tree Maker**. Procesa de forma transparente individuos (`INDI`), familias (`FAM`), eventos vitales (`BIRT`, `DEAT`), profesiones (`OCCU`), notas multilínea (`NOTE`, `CONT`, `CONC`) y enlaces de parentesco (`HUSB`, `WIFE`, `CHIL`).
+* **📜 Exportar GEDCOM X:** Exporta toda la base de datos en el estándar moderno **GEDCOM X (JSON)** (`http://gedcomx.org/`) con nombres desglosados en nombre de pila y apellidos, hechos de nacimiento/defunción, ocupaciones y relaciones completas de parentesco (`ParentChild` y `Couple`).
 * **📷 Exportar a Imagen PNG (Alta Definición):** Genera una imagen `.png` en resolución 2x (Retina / Ultra HD) del árbol genealógico completo con todas las ramas desplegadas, título de la familia y fecha. Ideal para visualizar cómodamente en el móvil, enviar por WhatsApp, Telegram o compartir con familiares.
 * **🖨️ Imprimir / Guardar en PDF:** Abre la ventana de impresión del navegador con estilos CSS optimizados para papel y formato apaisado (Landscape), permitiendo guardar directamente en PDF de alta calidad con fondo limpio.
 * **💾 Descargar JSON:** Descarga en cualquier momento tu archivo `.json` de respaldo completo en formato interno para guardarlo en tu disco duro, nube personal o memoria USB.
-* **📂 Cargar / Importar:** Selecciona un archivo `.json` guardado previamente o un archivo estándar **GEDCOM X**; la aplicación detectará el formato automáticamente y lo cargará.
+* **📂 Cargar / Importar Universal:** Carga archivos `.ged`, `.gedcom`, archivos `.json` de la aplicación o archivos estándar **GEDCOM X**; el sistema detecta automáticamente el formato y reconstruye el árbol genealógico.
 * **⚙️ Editor de JSON Crudo:** Puedes abrir una ventana modal con el código JSON formateado para inspeccionarlo, copiarlo al portapapeles o pegarle modificaciones directas.
 
 ---
