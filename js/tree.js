@@ -555,10 +555,33 @@ class TreeRenderer {
     line.setAttribute('y1', y1);
     line.setAttribute('x2', x);
     line.setAttribute('y2', y2);
-    line.setAttribute('stroke', '#cbd5e1');
-    line.setAttribute('stroke-width', '2');
-    line.setAttribute('stroke-dasharray', '3, 2');
+    line.setAttribute('class', 'tree-connector-marriage');
     this.svg.appendChild(line);
+  }
+
+  // Corchete de unión conyugal en el lado derecho hacia los hijos comunes
+  drawCoupleChildrenConnector(partnerX, partnerY, spouseY, cardW, cardH, children) {
+    if (!children || children.length === 0) return;
+    const rightX = partnerX + cardW;
+    const forkX = rightX + 16;
+    const pMidY = partnerY + cardH / 2;
+    const sMidY = spouseY + cardH / 2;
+    const branchMidY = (pMidY + sMidY) / 2;
+
+    // Corchete curvo que abraza los lados derechos de ambos cónyuges
+    const bracketPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const r = 6;
+    const bracketD = `M ${rightX} ${pMidY} H ${forkX - r} Q ${forkX} ${pMidY} ${forkX} ${pMidY + r} V ${sMidY - r} Q ${forkX} ${sMidY} ${forkX - r} ${sMidY} H ${rightX}`;
+    bracketPath.setAttribute('d', bracketD);
+    bracketPath.setAttribute('class', 'tree-connector tree-connector-couple');
+    this.svg.appendChild(bracketPath);
+
+    // Conector bezier hacia cada hijo desde el centro de la unión de la pareja
+    children.forEach(childNode => {
+      const childStartX = childNode.x;
+      const childMidY = childNode.y + cardH / 2;
+      this.drawConnection(forkX, branchMidY, childStartX, childMidY);
+    });
   }
 
   drawSiblingConnection(x1, y1, x2, y2) {
@@ -573,7 +596,8 @@ class TreeRenderer {
   drawSiblingBracket(x1, y1, x2, y2) {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     const bracketX = Math.min(x1, x2) - 18;
-    const d = `M ${x1} ${y1} H ${bracketX} V ${y2} H ${x2}`;
+    const r = 8;
+    const d = `M ${x1} ${y1} H ${bracketX + r} Q ${bracketX} ${y1} ${bracketX} ${y1 + r} V ${y2 - r} Q ${bracketX} ${y2} ${bracketX + r} ${y2} H ${x2}`;
     path.setAttribute('d', d);
     path.setAttribute('class', 'tree-connector tree-connector-sibling');
     this.svg.appendChild(path);
@@ -581,9 +605,11 @@ class TreeRenderer {
 
   render() {
     this.hideCardTooltip();
-    // Limpiar canvas
+    // Limpiar canvas de forma limpia y segura
     this.nodesContainer.innerHTML = '';
-    this.svg.innerHTML = '';
+    while (this.svg.firstChild) {
+      this.svg.removeChild(this.svg.firstChild);
+    }
 
     if (!this.rootPersonId || !this.peopleMap.has(this.rootPersonId)) {
       this.nodesContainer.innerHTML = `
@@ -770,28 +796,31 @@ class TreeRenderer {
         // Badge y enlace visual de matrimonio entre ambas tarjetas
         const marriageBadge = document.createElement('div');
         marriageBadge.className = 'couple-marriage-badge';
-        marriageBadge.style.left = `${stNode.x + 20}px`;
-        marriageBadge.style.top = `${stNode.y + cardH + 1}px`;
+        marriageBadge.style.left = `${stNode.x + 24}px`;
+        marriageBadge.style.top = `${stNode.y + cardH - 1}px`;
         marriageBadge.innerHTML = '💍 Matrimonio';
         this.nodesContainer.appendChild(marriageBadge);
 
-        this.drawMarriageLine(stNode.x + 14, stNode.y + cardH, stNode.spouseY);
+        this.drawMarriageLine(stNode.x + 18, stNode.y + cardH, stNode.spouseY);
       }
 
-      // 3. Conectores hacia los hijos y renderizado recursivo de los hijos
+      // 3. Conectores hacia los hijos y renderizado recursivo de la descendencia
       if (stNode.children && stNode.children.length > 0) {
-        const parentEndX = stNode.x + cardW;
-        const parentMidY = stNode.isCoupleVisible 
-          ? (stNode.y + cardH / 2 + stNode.spouseY + cardH / 2) / 2 
-          : (stNode.y + cardH / 2);
+        if (stNode.isCoupleVisible && stNode.spouse) {
+          // Si la pareja está visible, los hijos nacen de la unión común de ambos progenitores mediante corchete conyugal
+          this.drawCoupleChildrenConnector(stNode.x, stNode.y, stNode.spouseY, cardW, cardH, stNode.children);
+        } else {
+          // Si no hay cónyuge visible, salen directamente del lateral del progenitor
+          const parentEndX = stNode.x + cardW;
+          const parentMidY = stNode.y + cardH / 2;
+          stNode.children.forEach(childNode => {
+            const childStartX = childNode.x;
+            const childMidY = childNode.y + cardH / 2;
+            this.drawConnection(parentEndX, parentMidY, childStartX, childMidY);
+          });
+        }
 
         stNode.children.forEach(childNode => {
-          const childStartX = childNode.x;
-          const childMidY = childNode.isCoupleVisible 
-            ? (childNode.y + cardH / 2 + childNode.spouseY + cardH / 2) / 2 
-            : (childNode.y + cardH / 2);
-
-          this.drawConnection(parentEndX, parentMidY, childStartX, childMidY);
           renderFamilySubTree(childNode, ancestorGen, false);
         });
       }
@@ -840,17 +869,8 @@ class TreeRenderer {
         node.siblingTrees.forEach(st => {
           renderFamilySubTree(st, node.gen, true);
 
-          // Conexión visual del hermano con sus padres o con su hermano antepasado
-          if (node.fatherNode || node.motherNode) {
-            const parentNode = node.fatherNode || node.motherNode;
-            const pForkX = parentNode.x;
-            const pForkY = node.fatherNode && node.motherNode
-              ? (node.fatherNode.y + node.motherNode.y) / 2 + cardH / 2
-              : parentNode.y + cardH / 2;
-            this.drawSiblingConnection(st.x + cardW, st.y + cardH / 2, pForkX, pForkY);
-          } else {
-            this.drawSiblingBracket(node.x, node.y + cardH / 2, st.x, st.y + cardH / 2);
-          }
+          // Conexión visual del hermano con el nodo antepasado de su misma generación mediante corchete lateral limpio
+          this.drawSiblingBracket(node.x, node.y + cardH / 2, st.x, st.y + cardH / 2);
         });
       }
 
@@ -1358,5 +1378,325 @@ class TreeRenderer {
     if (gen === 6) return 'Pentabuelo/a (6ª Gen)';
     if (gen === 7) return 'Hexabuelo/a (7ª Gen)';
     return `Gen ${gen + 1}`;
+  }
+
+  // ==========================================
+  // EXPORTACIÓN A IMAGEN PNG (ALTA RESOLUCIÓN) Y PDF
+  // ==========================================
+  exportToPng(customTitle = null) {
+    return new Promise((resolve, reject) => {
+      try {
+        const cards = Array.from(this.nodesContainer.querySelectorAll('.person-card, .placeholder-card'));
+        if (cards.length === 0) {
+          throw new Error('No hay personas visibles en el árbol para exportar');
+        }
+
+        // 1. Calcular límites exactos del contenido visible
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        cards.forEach(card => {
+          const left = parseFloat(card.style.left) || 0;
+          const top = parseFloat(card.style.top) || 0;
+          const width = parseFloat(card.style.width) || this.options.cardWidth;
+          const height = parseFloat(card.style.height) || this.options.cardHeight;
+          if (left < minX) minX = left;
+          if (top < minY) minY = top;
+          if (left + width > maxX) maxX = left + width;
+          if (top + height > maxY) maxY = top + height;
+        });
+
+        const rootPerson = this.rootPersonId ? this.peopleMap.get(this.rootPersonId) : null;
+        const rootName = customTitle || (rootPerson ? `${rootPerson.nombre} ${rootPerson.apellidos || ''}`.trim() : 'Familia');
+
+        const marginX = 60;
+        const marginY = 60;
+        const headerH = 100;
+        const footerH = 40;
+
+        const contentW = maxX - minX;
+        const contentH = maxY - minY;
+        const totalW = contentW + marginX * 2;
+        const totalH = contentH + marginY * 2 + headerH + footerH;
+
+        const canvas = document.createElement('canvas');
+        // Escala 2x para calidad Retina / Ultra HD nítida en móviles
+        const scale = 2;
+        canvas.width = Math.round(totalW * scale);
+        canvas.height = Math.round(totalH * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+
+        // Fondo suave
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(0, 0, totalW, totalH);
+
+        // Rejilla de puntos sutiles
+        ctx.fillStyle = '#cbd5e1';
+        for (let gx = 12; gx < totalW; gx += 24) {
+          for (let gy = 12; gy < totalH; gy += 24) {
+            ctx.beginPath();
+            ctx.arc(gx, gy, 1.1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // Cabecera decorativa
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 24px "Plus Jakarta Sans", system-ui, -apple-system, sans-serif';
+        ctx.fillText(`🌳 Árbol Genealógico Familiar`, marginX, 48);
+
+        ctx.fillStyle = '#475569';
+        ctx.font = '500 15px "Plus Jakarta Sans", system-ui, -apple-system, sans-serif';
+        ctx.fillText(`Línea familiar de: ${rootName} • ${cards.length} personas visibles`, marginX, 74);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '400 12px "Plus Jakarta Sans", system-ui, -apple-system, sans-serif';
+        const dateStr = new Date().toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+        ctx.fillText(`Generado el ${dateStr}`, marginX, 94);
+
+        // Línea divisoria elegante
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(marginX, 110);
+        ctx.lineTo(totalW - marginX, 110);
+        ctx.stroke();
+
+        const offsetX = marginX - minX;
+        const offsetY = marginY + headerH - minY;
+
+        // 2. Dibujar todas las líneas de conexión SVG
+        const svgElements = Array.from(this.svg.querySelectorAll('path, line'));
+        svgElements.forEach(el => {
+          ctx.save();
+          ctx.translate(offsetX, offsetY);
+          const isSibling = el.classList.contains('tree-connector-sibling');
+          const isCouple = el.classList.contains('tree-connector-couple');
+          const isMarriage = el.classList.contains('tree-connector-marriage') || el.tagName === 'line';
+
+          if (isCouple || isMarriage) {
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([]);
+          } else if (isSibling) {
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.8;
+            ctx.setLineDash([4, 3]);
+          } else {
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2.2;
+            ctx.setLineDash([]);
+          }
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          if (el.tagName === 'line') {
+            const x1 = parseFloat(el.getAttribute('x1')) || 0;
+            const y1 = parseFloat(el.getAttribute('y1')) || 0;
+            const x2 = parseFloat(el.getAttribute('x2')) || 0;
+            const y2 = parseFloat(el.getAttribute('y2')) || 0;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+          } else if (el.tagName === 'path') {
+            const d = el.getAttribute('d');
+            if (d && typeof Path2D !== 'undefined') {
+              const path2d = new Path2D(d);
+              ctx.stroke(path2d);
+            }
+          }
+          ctx.restore();
+        });
+
+        // 3. Dibujar insignias de matrimonio entre cónyuges
+        const badges = Array.from(this.nodesContainer.querySelectorAll('.couple-marriage-badge'));
+        badges.forEach(b => {
+          const bx = parseFloat(b.style.left) || 0;
+          const by = parseFloat(b.style.top) || 0;
+          ctx.save();
+          ctx.translate(bx + offsetX, by + offsetY);
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#fcd34d';
+          ctx.lineWidth = 1;
+          this.drawCanvasRoundedRect(ctx, 0, 0, 84, 18, 9, true, true);
+          ctx.fillStyle = '#b45309';
+          ctx.font = 'bold 9.5px "Plus Jakarta Sans", system-ui, sans-serif';
+          ctx.fillText('💍 Matrimonio', 7, 12.5);
+          ctx.restore();
+        });
+
+        // 4. Dibujar cada tarjeta
+        cards.forEach(card => {
+          const cx = (parseFloat(card.style.left) || 0) + offsetX;
+          const cy = (parseFloat(card.style.top) || 0) + offsetY;
+          const cw = parseFloat(card.style.width) || this.options.cardWidth;
+          const ch = parseFloat(card.style.height) || this.options.cardHeight;
+
+          if (card.classList.contains('placeholder-card')) {
+            ctx.save();
+            ctx.fillStyle = '#f8fafc';
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            this.drawCanvasRoundedRect(ctx, cx, cy, cw, ch, 8, true, true);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '500 12px "Plus Jakarta Sans", system-ui, sans-serif';
+            const txt = card.textContent.trim().replace(/\s+/g, ' ');
+            ctx.fillText(txt, cx + 24, cy + ch / 2 + 4);
+            ctx.restore();
+            return;
+          }
+
+          const personId = card.dataset.id;
+          const person = this.peopleMap.get(String(personId));
+          if (!person) return;
+
+          const isFemale = person.genero === 'F';
+          const isMale = person.genero === 'M';
+          const isRoot = card.classList.contains('card-root');
+
+          ctx.save();
+          // Sombra suave de la tarjeta
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+          ctx.shadowBlur = 8;
+          ctx.shadowOffsetY = 2;
+
+          // Fondo de la tarjeta
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = isRoot ? '#0284c7' : (isFemale ? '#f472b6' : (isMale ? '#60a5fa' : '#cbd5e1'));
+          ctx.lineWidth = isRoot ? 2.5 : 1.5;
+          this.drawCanvasRoundedRect(ctx, cx, cy, cw, ch, 10, true, true);
+          ctx.restore();
+
+          // Barra vertical de acento de género en el borde izquierdo
+          ctx.save();
+          ctx.fillStyle = isFemale ? '#ec4899' : (isMale ? '#2563eb' : '#94a3b8');
+          this.drawCanvasRoundedRect(ctx, cx, cy, 5, ch, { tl: 10, bl: 10, tr: 0, br: 0 }, true, false);
+          ctx.restore();
+
+          // Círculo de Avatar
+          const avatarX = cx + 28;
+          const avatarY = cy + ch / 2;
+          const avatarR = 20;
+
+          ctx.save();
+          ctx.fillStyle = isFemale ? '#fce7f3' : (isMale ? '#dbeafe' : '#f1f5f9');
+          ctx.beginPath();
+          ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Iniciales en el avatar
+          ctx.fillStyle = isFemale ? '#db2777' : (isMale ? '#1d4ed8' : '#475569');
+          ctx.font = 'bold 12px "Plus Jakarta Sans", system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(this.getInitials(person), avatarX, avatarY);
+          ctx.restore();
+
+          // Textos biográficos
+          const textX = cx + 56;
+          const maxTextW = cw - 64;
+
+          // Nombre completo
+          ctx.save();
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 12.5px "Plus Jakarta Sans", system-ui, sans-serif';
+          const fullName = `${person.nombre} ${person.apellidos || ''}`.trim();
+          const displayName = this.truncateCanvasText(ctx, fullName, maxTextW);
+          ctx.fillText(displayName, textX, cy + 26);
+
+          // Fechas de vida
+          ctx.fillStyle = '#64748b';
+          ctx.font = '400 11px "Plus Jakarta Sans", system-ui, sans-serif';
+          const lifeSpan = this.formatLifeSpan(person);
+          ctx.fillText(lifeSpan, textX, cy + 44);
+
+          // Lugar o badge
+          const place = person.lugarNacimiento || person.lugarFallecimiento;
+          if (place) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '400 10px "Plus Jakarta Sans", system-ui, sans-serif';
+            const displayPlace = this.truncateCanvasText(ctx, `📍 ${place}`, maxTextW);
+            ctx.fillText(displayPlace, textX, cy + 60);
+          }
+
+          // Badge de parentesco
+          const badgeEl = card.querySelector('.card-gen-badge');
+          if (badgeEl) {
+            const badgeText = badgeEl.textContent.trim();
+            ctx.fillStyle = isFemale ? '#fdf2f8' : (isMale ? '#eff6ff' : '#f8fafc');
+            ctx.strokeStyle = isFemale ? '#fbcfe8' : (isMale ? '#bfdbfe' : '#e2e8f0');
+            ctx.lineWidth = 1;
+            const bW = Math.min(ctx.measureText(badgeText).width + 12, maxTextW);
+            this.drawCanvasRoundedRect(ctx, textX, cy + (place ? 66 : 54), bW, 16, 4, true, true);
+            ctx.fillStyle = isFemale ? '#be185d' : (isMale ? '#1d4ed8' : '#475569');
+            ctx.font = '600 9.5px "Plus Jakarta Sans", system-ui, sans-serif';
+            ctx.fillText(badgeText, textX + 6, cy + (place ? 78 : 66));
+          }
+
+          ctx.restore();
+        });
+
+        // 5. Pie de imagen
+        ctx.save();
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '400 11px "Plus Jakarta Sans", system-ui, sans-serif';
+        ctx.fillText('Mi Árbol Genealógico Familiar • Documento exportado en alta resolución', marginX, totalH - 18);
+        ctx.restore();
+
+        // 6. Descargar automáticamente el archivo PNG
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('No se pudo generar el archivo PNG'));
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          const safeTitle = rootName.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30);
+          const today = new Date().toISOString().split('T')[0];
+          a.download = `arbol_genealogico_${safeTitle}_${today}.png`;
+          a.href = url;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          resolve(a.download);
+        }, 'image/png');
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  drawCanvasRoundedRect(ctx, x, y, width, height, radius, fill, stroke) {
+    if (typeof radius === 'number') {
+      radius = { tl: radius, tr: radius, br: radius, bl: radius };
+    }
+    ctx.beginPath();
+    ctx.moveTo(x + radius.tl, y);
+    ctx.lineTo(x + width - radius.tr, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+    ctx.lineTo(x + width, y + height - radius.br);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+    ctx.lineTo(x + radius.bl, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+    ctx.lineTo(x, y + radius.tl);
+    ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+    ctx.closePath();
+    if (fill) ctx.fill();
+    if (stroke) ctx.stroke();
+  }
+
+  truncateCanvasText(ctx, text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let t = text;
+    while (t.length > 0 && ctx.measureText(t + '…').width > maxWidth) {
+      t = t.substring(0, t.length - 1);
+    }
+    return t + '…';
+  }
+
+  printTree() {
+    window.print();
   }
 }

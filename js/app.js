@@ -168,6 +168,29 @@ class GenealogyApp {
       this.openAddModal();
     });
 
+    const btnExportImage = document.getElementById('btnExportImage');
+    if (btnExportImage) {
+      btnExportImage.addEventListener('click', async () => {
+        try {
+          const rootPerson = this.data.personas.find(p => String(p.id) === String(this.treeRenderer.rootPersonId));
+          const rootName = rootPerson ? `${rootPerson.nombre} ${rootPerson.apellidos || ''}`.trim() : 'Familia';
+          this.showToast('Generando imagen de alta resolución...');
+          const filename = await this.treeRenderer.exportToPng(rootName);
+          this.showToast(`Imagen descargada con éxito: ${filename}`);
+        } catch (err) {
+          console.error(err);
+          this.showToast(err.message || 'Error al exportar la imagen');
+        }
+      });
+    }
+
+    const btnPrintPdf = document.getElementById('btnPrintPdf');
+    if (btnPrintPdf) {
+      btnPrintPdf.addEventListener('click', () => {
+        this.treeRenderer.printTree();
+      });
+    }
+
     document.getElementById('btnExportJson').addEventListener('click', () => {
       this.exportToJsonFile();
     });

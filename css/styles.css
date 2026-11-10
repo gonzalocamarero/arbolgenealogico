@@ -394,8 +394,23 @@ body {
 .tree-connector.tree-connector-sibling {
   stroke: #94a3b8;
   stroke-dasharray: 4, 3;
-  stroke-width: 1.5;
-  opacity: 0.85;
+  stroke-width: 1.8;
+  opacity: 0.9;
+}
+
+.tree-connector.tree-connector-couple {
+  fill: none;
+  stroke: #f59e0b;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  opacity: 0.95;
+}
+
+.tree-connector-marriage {
+  fill: none;
+  stroke: #f59e0b;
+  stroke-width: 2.5;
+  stroke-linecap: round;
 }
 
 .tree-nodes {
@@ -1976,5 +1991,71 @@ body {
 
   .form-row-2, .form-row-3 {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   ESTILOS DE IMPRESIÓN Y EXPORTACIÓN A PDF
+   ========================================================================== */
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    overflow: visible !important;
+  }
+
+  .app-header,
+  .zoom-controls,
+  .canvas-instructions,
+  .search-container,
+  .detail-drawer,
+  .modal-overlay,
+  .card-floating-tooltip,
+  .btn-simultaneous-action,
+  .mini-badge-actions,
+  .card-actions,
+  .card-sibling-toggle,
+  .card-family-toggle,
+  .drill-down-indicator,
+  .btn-add-mini,
+  .placeholder-card,
+  .toast,
+  .directory-viewport {
+    display: none !important;
+  }
+
+  .app-main,
+  .tree-viewport {
+    position: static !important;
+    overflow: visible !important;
+    width: auto !important;
+    height: auto !important;
+    background: #ffffff !important;
+    background-image: none !important;
+  }
+
+  .tree-canvas {
+    position: static !important;
+    transform: none !important;
+  }
+
+  .person-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+    border-color: #94a3b8 !important;
+    page-break-inside: avoid;
+  }
+
+  .tree-connector {
+    stroke: #64748b !important;
+  }
+
+  .tree-connector.tree-connector-couple,
+  .tree-connector-marriage {
+    stroke: #d97706 !important;
   }
 }
