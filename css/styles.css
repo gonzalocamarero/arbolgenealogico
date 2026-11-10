@@ -1843,6 +1843,108 @@ body {
 }
 
 /* ==========================================================================
+   TOOLTIP FLOTANTE DE TARJETA (NOMBRE Y APELLIDOS COMPLETOS)
+   ========================================================================== */
+.card-floating-tooltip {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-family: var(--font-main);
+  max-width: 320px;
+  min-width: 170px;
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -100%) scale(0.95);
+  transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s ease;
+  white-space: normal;
+}
+
+.card-floating-tooltip.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, -100%) scale(1);
+}
+
+.card-floating-tooltip.pos-bottom {
+  transform: translate(-50%, 0) scale(0.95);
+}
+
+.card-floating-tooltip.pos-bottom.visible {
+  transform: translate(-50%, 0) scale(1);
+}
+
+.card-floating-tooltip .tooltip-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.35;
+  letter-spacing: -0.1px;
+}
+
+.card-floating-tooltip .tooltip-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.card-floating-tooltip .tooltip-badge {
+  background: rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(147, 197, 253, 0.4);
+  color: #dbeafe;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 9.5px;
+}
+
+.card-floating-tooltip .tooltip-dates {
+  color: #cbd5e1;
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.card-floating-tooltip .tooltip-place {
+  font-size: 10.5px;
+  color: #94a3b8;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Flecha decorativa del tooltip */
+.card-floating-tooltip::after {
+  content: '';
+  position: absolute;
+  border: 6px solid transparent;
+}
+
+.card-floating-tooltip.pos-top::after {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: rgba(15, 23, 42, 0.95);
+}
+
+.card-floating-tooltip.pos-bottom::after {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: rgba(15, 23, 42, 0.95);
+}
+
+/* ==========================================================================
    RESPONSIVIDAD Y AJUSTES MÓVILES
    ========================================================================== */
 @media (max-width: 900px) {

@@ -40,6 +40,7 @@ class TreeRenderer {
     this.collapsedSiblingFamilyIds = new Set(); // Control de colapso individual cuando está activo globalmente
     
     this.initEvents();
+    this.initTooltip();
     this.updateTransform();
   }
 
@@ -117,7 +118,100 @@ class TreeRenderer {
     });
   }
 
+  // ==========================================
+  // TOOLTIP FLOTANTE DE NOMBRE COMPLETO
+  // ==========================================
+  initTooltip() {
+    let tooltip = document.getElementById('cardFloatingTooltip');
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.id = 'cardFloatingTooltip';
+      tooltip.className = 'card-floating-tooltip';
+      this.container.appendChild(tooltip);
+    }
+    this.tooltipEl = tooltip;
+
+    let hoverTimeout = null;
+
+    this.container.addEventListener('mouseover', (e) => {
+      const card = e.target.closest('.person-card');
+      if (card && card.dataset.id) {
+        clearTimeout(hoverTimeout);
+        hoverTimeout = setTimeout(() => {
+          this.showCardTooltip(card);
+        }, 100); // 100ms para una aparición inmediata y suave
+      }
+    });
+
+    this.container.addEventListener('mouseout', (e) => {
+      const card = e.target.closest('.person-card');
+      if (card && (!e.relatedTarget || !card.contains(e.relatedTarget))) {
+        clearTimeout(hoverTimeout);
+        this.hideCardTooltip();
+      }
+    });
+
+    // Ocultar al arrastrar el lienzo o cambiar de zoom
+    this.container.addEventListener('mousedown', () => this.hideCardTooltip());
+    this.container.addEventListener('wheel', () => this.hideCardTooltip(), { passive: true });
+  }
+
+  showCardTooltip(card) {
+    if (!this.tooltipEl || !card) return;
+    const personId = card.dataset.id;
+    const person = this.peopleMap.get(String(personId));
+    if (!person) return;
+
+    const fullName = `${person.nombre} ${person.apellidos || ''}`.trim();
+    const lifeSpan = this.formatLifeSpan(person);
+    const place = person.lugarNacimiento || person.lugarFallecimiento || '';
+    const badgeEl = card.querySelector('.card-gen-badge');
+    const badgeText = badgeEl ? badgeEl.textContent.trim() : '';
+
+    this.tooltipEl.innerHTML = `
+      <div class="tooltip-name">${fullName}</div>
+      <div class="tooltip-meta">
+        ${badgeText ? `<span class="tooltip-badge">${badgeText}</span>` : ''}
+        <span class="tooltip-dates">${lifeSpan}</span>
+      </div>
+      ${place ? `<div class="tooltip-place">📍 ${place}</div>` : ''}
+    `;
+
+    // Posicionamiento flotante respecto al contenedor
+    const containerRect = this.container.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+
+    const cardCenterX = (cardRect.left - containerRect.left) + (cardRect.width / 2);
+    const cardTopY = cardRect.top - containerRect.top;
+    const cardBottomY = cardRect.bottom - containerRect.top;
+
+    // Decidir si colocar arriba o abajo según proximidad al borde superior
+    const placeAbove = cardTopY > 90;
+    this.tooltipEl.classList.remove('pos-top', 'pos-bottom');
+
+    if (placeAbove) {
+      this.tooltipEl.classList.add('pos-top');
+      this.tooltipEl.style.left = `${cardCenterX}px`;
+      this.tooltipEl.style.top = `${cardTopY - 10}px`;
+      this.tooltipEl.style.transform = 'translate(-50%, -100%)';
+    } else {
+      this.tooltipEl.classList.add('pos-bottom');
+      this.tooltipEl.style.left = `${cardCenterX}px`;
+      this.tooltipEl.style.top = `${cardBottomY + 10}px`;
+      this.tooltipEl.style.transform = 'translate(-50%, 0)';
+    }
+
+    this.tooltipEl.classList.add('visible');
+  }
+
+  hideCardTooltip() {
+    if (this.tooltipEl) {
+      this.tooltipEl.classList.remove('visible');
+    }
+  }
+
   updateTransform() {
+    this.hideCardTooltip();
     this.canvas.style.transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
   }
 
@@ -486,6 +580,7 @@ class TreeRenderer {
   }
 
   render() {
+    this.hideCardTooltip();
     // Limpiar canvas
     this.nodesContainer.innerHTML = '';
     this.svg.innerHTML = '';
@@ -1069,8 +1164,10 @@ class TreeRenderer {
     if (meta.isSibling) card.classList.add('card-sibling');
     if (meta.isSpouse) card.classList.add('card-spouse');
     if (meta.isCollateralDescendant) card.classList.add('card-collateral-descendant');
+    const fullName = `${person.nombre} ${person.apellidos || ''}`.trim();
     card.id = `card-${person.id}`;
     card.dataset.id = String(person.id);
+    card.dataset.fullname = fullName;
     card.style.left = `${x}px`;
     card.style.top = `${y}px`;
     card.style.width = `${this.options.cardWidth}px`;
@@ -1133,7 +1230,7 @@ class TreeRenderer {
         <span class="card-gender-icon">${person.genero === 'F' ? '♀' : (person.genero === 'M' ? '♂' : '⚪')}</span>
       </div>
       <div class="card-info">
-        <div class="card-name" title="${person.nombre} ${person.apellidos || ''}">${person.nombre} ${person.apellidos || ''}</div>
+        <div class="card-name">${fullName}</div>
         <div class="card-dates">${lifeSpan}</div>
         ${place ? `<div class="card-place" title="${person.lugarNacimiento}">📍 ${place}</div>` : ''}
         ${meta.generationName ? `<div class="card-gen-badge ${badgeClass}">${meta.generationName}</div>` : ''}
