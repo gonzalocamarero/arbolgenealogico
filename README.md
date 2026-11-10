@@ -36,10 +36,11 @@ No necesitas instalar servidores, dependencias de Node.js ni bases de datos:
   * **Fotografías:** Puedes poner la URL de una foto en internet o **subir una imagen desde tu ordenador** (se almacena de forma segura en Base64 dentro del mismo archivo JSON).
 * **Ficha biográfica lateral (Drawer):** Haz clic en cualquier familiar para abrir su ficha completa con cálculo automático de edad, lista interactiva de padres, cónyuge, hijos y hermanos.
 
-### 3. Total Control de tus Datos (JSON)
+### 3. Total Control e Interoperabilidad de tus Datos (JSON y GEDCOM X)
 * **Guardado automático local:** Todos tus cambios se guardan al instante en el `localStorage` de tu navegador para que nunca pierdas nada al recargar o cerrar la pestaña.
 * **💾 Descargar JSON:** Descarga en cualquier momento tu archivo `.json` de respaldo completo para guardarlo en tu disco duro, nube personal o memoria USB.
-* **📂 Cargar JSON:** Selecciona un archivo `.json` guardado previamente o editado a mano para cargarlo en la aplicación.
+* **📜 Exportar GEDCOM X:** Exporta toda la base de datos en el estándar internacional **GEDCOM X (JSON)**, compatible con FamilySearch, RootsMagic, gramps y las principales herramientas genealógicas modernas.
+* **📂 Cargar / Importar:** Selecciona un archivo `.json` guardado previamente o un archivo estándar **GEDCOM X**; la aplicación detectará el formato automáticamente y lo cargará.
 * **⚙️ Editor de JSON Crudo:** Puedes abrir una ventana modal con el código JSON formateado para inspeccionarlo, copiarlo al portapapeles o pegarle modificaciones directas.
 
 ---

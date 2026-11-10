@@ -172,6 +172,13 @@ class GenealogyApp {
       this.exportToJsonFile();
     });
 
+    const btnExportGedcomX = document.getElementById('btnExportGedcomX');
+    if (btnExportGedcomX) {
+      btnExportGedcomX.addEventListener('click', () => {
+        this.exportToGedcomXFile();
+      });
+    }
+
     document.getElementById('btnImportJson').addEventListener('click', () => {
       document.getElementById('fileInputJson').click();
     });
@@ -850,6 +857,254 @@ class GenealogyApp {
     this.showToast('Archivo JSON descargado');
   }
 
+  exportToGedcomXFile() {
+    const gedcomXData = this.convertToGedcomX(this.treeData);
+    const dataStr = JSON.stringify(gedcomXData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/x-gedcomx-v1+json,application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `arbol_genealogico_gedcomx_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    this.showToast('Árbol exportado en formato estándar GEDCOM X');
+  }
+
+  convertToGedcomX(treeData) {
+    const persons = [];
+    const relationships = [];
+    const couplePairs = new Set();
+    const parentChildPairs = new Set();
+
+    (treeData.personas || []).forEach(p => {
+      let genderType = "http://gedcomx.org/Unknown";
+      if (p.genero === 'M') genderType = "http://gedcomx.org/Male";
+      else if (p.genero === 'F') genderType = "http://gedcomx.org/Female";
+
+      const givenName = p.nombre ? String(p.nombre).trim() : '';
+      const surname = p.apellidos ? String(p.apellidos).trim() : '';
+      const fullName = `${givenName} ${surname}`.trim();
+
+      const nameParts = [];
+      if (givenName) nameParts.push({ type: "http://gedcomx.org/Given", value: givenName });
+      if (surname) nameParts.push({ type: "http://gedcomx.org/Surname", value: surname });
+
+      const names = [];
+      if (fullName) {
+        names.push({
+          type: "http://gedcomx.org/BirthName",
+          preferred: true,
+          nameForms: [{ fullText: fullName, parts: nameParts }]
+        });
+      }
+
+      const facts = [];
+      if (p.fechaNacimiento || p.lugarNacimiento) {
+        const birthFact = { type: "http://gedcomx.org/Birth" };
+        if (p.fechaNacimiento) birthFact.date = { original: String(p.fechaNacimiento) };
+        if (p.lugarNacimiento) birthFact.place = { original: String(p.lugarNacimiento) };
+        facts.push(birthFact);
+      }
+
+      if (p.fechaFallecimiento || p.lugarFallecimiento || p.fallecido) {
+        const deathFact = { type: "http://gedcomx.org/Death" };
+        if (p.fechaFallecimiento) deathFact.date = { original: String(p.fechaFallecimiento) };
+        if (p.lugarFallecimiento) deathFact.place = { original: String(p.lugarFallecimiento) };
+        facts.push(deathFact);
+      }
+
+      if (p.profesion) {
+        facts.push({
+          type: "http://gedcomx.org/Occupation",
+          value: String(p.profesion).trim()
+        });
+      }
+
+      const notes = [];
+      const bioText = p.biografia || p.notas;
+      if (bioText) {
+        notes.push({ text: String(bioText).trim() });
+      }
+
+      const gxPerson = {
+        id: String(p.id),
+        living: !p.fallecido && !p.fechaFallecimiento,
+        gender: { type: genderType },
+        names: names,
+        facts: facts
+      };
+
+      if (notes.length > 0) gxPerson.notes = notes;
+      if (p.foto) {
+        gxPerson.media = [{ description: "Foto", url: p.foto }];
+      }
+
+      persons.push(gxPerson);
+
+      if (p.padreId) {
+        const pairKey = `${p.padreId}->${p.id}`;
+        if (!parentChildPairs.has(pairKey)) {
+          parentChildPairs.add(pairKey);
+          relationships.push({
+            id: `pc-${p.padreId}-${p.id}`,
+            type: "http://gedcomx.org/ParentChild",
+            person1: { resource: `#${p.padreId}` },
+            person2: { resource: `#${p.id}` }
+          });
+        }
+      }
+
+      if (p.madreId) {
+        const pairKey = `${p.madreId}->${p.id}`;
+        if (!parentChildPairs.has(pairKey)) {
+          parentChildPairs.add(pairKey);
+          relationships.push({
+            id: `pc-${p.madreId}-${p.id}`,
+            type: "http://gedcomx.org/ParentChild",
+            person1: { resource: `#${p.madreId}` },
+            person2: { resource: `#${p.id}` }
+          });
+        }
+      }
+
+      if (p.parejaId) {
+        const sortedCouple = [String(p.id), String(p.parejaId)].sort();
+        const coupleKey = sortedCouple.join('<->');
+        if (!couplePairs.has(coupleKey)) {
+          couplePairs.add(coupleKey);
+          relationships.push({
+            id: `cp-${sortedCouple[0]}-${sortedCouple[1]}`,
+            type: "http://gedcomx.org/Couple",
+            person1: { resource: `#${sortedCouple[0]}` },
+            person2: { resource: `#${sortedCouple[1]}` }
+          });
+        }
+      }
+    });
+
+    return {
+      attribution: {
+        creator: { resource: "#antigravity-arbol-genealogico" },
+        created: new Date().toISOString()
+      },
+      description: `#${(treeData.config && treeData.config.titulo) || 'Arbol Genealogico'}`,
+      persons,
+      relationships
+    };
+  }
+
+  parseGedcomX(gx) {
+    const peopleMap = new Map();
+
+    (gx.persons || []).forEach(p => {
+      let genero = 'X';
+      if (p.gender && p.gender.type) {
+        if (p.gender.type.endsWith('Female')) genero = 'F';
+        else if (p.gender.type.endsWith('Male')) genero = 'M';
+      }
+
+      let nombre = '';
+      let apellidos = '';
+      if (p.names && p.names.length > 0) {
+        const prefName = p.names.find(n => n.preferred) || p.names[0];
+        if (prefName.nameForms && prefName.nameForms.length > 0) {
+          const form = prefName.nameForms[0];
+          if (form.parts && form.parts.length > 0) {
+            const givenPart = form.parts.find(pt => pt.type && pt.type.endsWith('Given'));
+            const surPart = form.parts.find(pt => pt.type && pt.type.endsWith('Surname'));
+            if (givenPart) nombre = givenPart.value;
+            if (surPart) apellidos = surPart.value;
+          } else if (form.fullText) {
+            const parts = form.fullText.split(/\s+/);
+            nombre = parts[0] || '';
+            apellidos = parts.slice(1).join(' ') || '';
+          }
+        }
+      }
+
+      let fechaNacimiento = '';
+      let lugarNacimiento = '';
+      let fechaFallecimiento = '';
+      let lugarFallecimiento = '';
+      let profesion = '';
+
+      (p.facts || []).forEach(f => {
+        if (f.type && f.type.endsWith('Birth')) {
+          if (f.date && f.date.original) fechaNacimiento = f.date.original;
+          if (f.place && f.place.original) lugarNacimiento = f.place.original;
+        } else if (f.type && f.type.endsWith('Death')) {
+          if (f.date && f.date.original) fechaFallecimiento = f.date.original;
+          if (f.place && f.place.original) lugarFallecimiento = f.place.original;
+        } else if (f.type && f.type.endsWith('Occupation')) {
+          if (f.value) profesion = f.value;
+        }
+      });
+
+      let biografia = '';
+      if (p.notes && p.notes.length > 0) {
+        biografia = p.notes.map(n => n.text).join('\n');
+      }
+
+      let foto = null;
+      if (p.media && p.media.length > 0 && p.media[0].url) {
+        foto = p.media[0].url;
+      }
+
+      const fallecido = p.living === false || !!fechaFallecimiento;
+
+      peopleMap.set(String(p.id), {
+        id: String(p.id),
+        nombre,
+        apellidos,
+        genero,
+        fechaNacimiento,
+        fechaFallecimiento,
+        lugarNacimiento,
+        lugarFallecimiento,
+        profesion,
+        biografia,
+        fallecido,
+        padreId: null,
+        madreId: null,
+        parejaId: null,
+        foto
+      });
+    });
+
+    (gx.relationships || []).forEach(r => {
+      const p1Id = r.person1 && r.person1.resource ? r.person1.resource.replace('#', '') : null;
+      const p2Id = r.person2 && r.person2.resource ? r.person2.resource.replace('#', '') : null;
+      if (!p1Id || !p2Id) return;
+
+      if (r.type && r.type.endsWith('ParentChild')) {
+        const parent = peopleMap.get(p1Id);
+        const child = peopleMap.get(p2Id);
+        if (child && parent) {
+          if (parent.genero === 'F') {
+            child.madreId = parent.id;
+          } else {
+            child.padreId = parent.id;
+          }
+        }
+      } else if (r.type && r.type.endsWith('Couple')) {
+        const sp1 = peopleMap.get(p1Id);
+        const sp2 = peopleMap.get(p2Id);
+        if (sp1) sp1.parejaId = p2Id;
+        if (sp2) sp2.parejaId = p1Id;
+      }
+    });
+
+    return {
+      config: {
+        titulo: (gx.description && gx.description.replace(/^#/, '')) || "Árbol Genealógico GEDCOM X",
+        personaRaizId: peopleMap.size > 0 ? Array.from(peopleMap.keys())[0] : null
+      },
+      personas: Array.from(peopleMap.values())
+    };
+  }
+
   handleFileImport(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -858,18 +1113,29 @@ class GenealogyApp {
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target.result);
-        if (!parsed || !Array.isArray(parsed.personas)) {
-          alert('El archivo JSON no tiene el formato esperado (debe contener un array "personas").');
+        let finalData = null;
+        let isGedcomX = false;
+
+        if (parsed && Array.isArray(parsed.personas)) {
+          // Formato estándar de la aplicación
+          finalData = parsed;
+        } else if (parsed && Array.isArray(parsed.persons)) {
+          // Formato internacional GEDCOM X
+          finalData = this.parseGedcomX(parsed);
+          isGedcomX = true;
+        } else {
+          alert('El archivo JSON no tiene un formato válido (debe ser formato de la aplicación con "personas" o formato estándar GEDCOM X con "persons").');
           return;
         }
 
-        if (confirm(`Se han detectado ${parsed.personas.length} personas en el archivo. ¿Deseas reemplazar el árbol actual con estos datos?`)) {
-          this.treeData = parsed;
+        const formatLabel = isGedcomX ? 'en formato estándar GEDCOM X' : 'en formato JSON';
+        if (confirm(`Se han detectado ${finalData.personas.length} personas ${formatLabel}. ¿Deseas reemplazar el árbol actual con estos datos?`)) {
+          this.treeData = finalData;
           this.saveToLocalStorage();
           this.treeRenderer.setData(this.treeData);
           this.renderDirectoryList();
           this.updateStats();
-          this.showToast(`Se cargaron ${parsed.personas.length} personas con éxito`);
+          this.showToast(`Se cargaron ${finalData.personas.length} personas con éxito (${isGedcomX ? 'GEDCOM X' : 'JSON'})`);
         }
       } catch (err) {
         alert('Error al leer el archivo JSON: ' + err.message);
