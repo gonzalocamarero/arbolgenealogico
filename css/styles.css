@@ -377,8 +377,9 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 5000px;
-  height: 4000px;
+  width: 25000px;
+  height: 25000px;
+  overflow: visible;
   pointer-events: none;
   z-index: 1;
 }
@@ -417,8 +418,8 @@ body {
   position: absolute;
   top: 0;
   left: 0;
-  width: 5000px;
-  height: 4000px;
+  width: 25000px;
+  height: 25000px;
   z-index: 2;
 }
 

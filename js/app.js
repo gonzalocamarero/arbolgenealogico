@@ -172,7 +172,9 @@ class GenealogyApp {
     if (btnExportImage) {
       btnExportImage.addEventListener('click', async () => {
         try {
-          const rootPerson = this.data.personas.find(p => String(p.id) === String(this.treeRenderer.rootPersonId));
+          const rootPerson = (this.treeData && this.treeData.personas)
+            ? this.treeData.personas.find(p => String(p.id) === String(this.treeRenderer.rootPersonId))
+            : (this.treeRenderer.peopleMap ? this.treeRenderer.peopleMap.get(String(this.treeRenderer.rootPersonId)) : null);
           const rootName = rootPerson ? `${rootPerson.nombre} ${rootPerson.apellidos || ''}`.trim() : 'Familia';
           this.showToast('Generando imagen de alta resolución...');
           const filename = await this.treeRenderer.exportToPng(rootName);

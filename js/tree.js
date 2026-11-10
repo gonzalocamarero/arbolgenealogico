@@ -584,6 +584,21 @@ class TreeRenderer {
     });
   }
 
+  // Corchete de unión conyugal en el lado derecho para parejas sin descendencia visible
+  drawCoupleMarriageLinkRight(partnerX, partnerY, spouseY, cardW, cardH) {
+    const rightX = partnerX + cardW;
+    const forkX = rightX + 16;
+    const pMidY = partnerY + cardH / 2;
+    const sMidY = spouseY + cardH / 2;
+
+    const bracketPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const r = 6;
+    const bracketD = `M ${rightX} ${pMidY} H ${forkX - r} Q ${forkX} ${pMidY} ${forkX} ${pMidY + r} V ${sMidY - r} Q ${forkX} ${sMidY} ${forkX - r} ${sMidY} H ${rightX}`;
+    bracketPath.setAttribute('d', bracketD);
+    bracketPath.setAttribute('class', 'tree-connector tree-connector-couple');
+    this.svg.appendChild(bracketPath);
+  }
+
   drawSiblingConnection(x1, y1, x2, y2) {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     const dx = Math.abs(x2 - x1) * 0.5;
@@ -628,6 +643,11 @@ class TreeRenderer {
     } else if (this.currentMode === 'descendants') {
       this.renderDescendantsView();
     }
+
+    // Asegurar dimensiones amplias sin recortes para árboles expandidos y vistas simultáneas
+    this.svg.setAttribute('width', '25000');
+    this.svg.setAttribute('height', '25000');
+    this.svg.style.overflow = 'visible';
   }
 
   // ==========================================
@@ -802,6 +822,11 @@ class TreeRenderer {
         this.nodesContainer.appendChild(marriageBadge);
 
         this.drawMarriageLine(stNode.x + 18, stNode.y + cardH, stNode.spouseY);
+
+        // Si la pareja no tiene hijos registrados, trazar el corchete de unión en el lado derecho
+        if (!stNode.children || stNode.children.length === 0) {
+          this.drawCoupleMarriageLinkRight(stNode.x, stNode.y, stNode.spouseY, cardW, cardH);
+        }
       }
 
       // 3. Conectores hacia los hijos y renderizado recursivo de la descendencia
